@@ -1,11 +1,11 @@
 [tool.poetry]
 name = "specifipy"
-version = "0.5.0"
+version = "0.5.1"
 description = "Python package for auto-generating code diagrams"
 authors = ["Bartosz Budzyński <hi@bartosz.blog>"]
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.9"
 snakemd = "^0.11.0"
 docstring-parser = "^0.15"
 py-d2 = "1.0.0"
