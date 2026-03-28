@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "specifipy"
-version = "0.3.1"
+version = "0.5.0"
 description = "Python package for auto-generating code diagrams"
 authors = ["Bartosz Budzyński <hi@bartosz.blog>"]
 
@@ -10,6 +10,11 @@ snakemd = "^0.11.0"
 docstring-parser = "^0.15"
 py-d2 = "1.0.0"
 javalang = "0.13.0"
+tree-sitter = ">=0.23.0"
+tree-sitter-typescript = ">=0.23.0"
+
+[tool.poetry.scripts]
+specifipy = "specifipy.cli:main"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"

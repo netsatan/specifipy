@@ -1,10 +1,10 @@
+import fnmatch
 import os
-from enum import Enum
 
 from py_d2 import D2Diagram
 
 from specifipy.diagram_engines.hashable_connection import D2HashableConnection
-from specifipy.parsers.diagram_generator_d2 import DiagramGenerator
+from specifipy.parsers.base_diagram_generator import BaseDiagramGenerator
 from specifipy.parsers.generic_parser import FileType
 
 
@@ -14,13 +14,19 @@ class DirectoryScanner:
     full_file_paths: list[str] = []
     file_type: FileType = FileType.PYTHON
 
-    file_extension_mapping: dict[str, str] = {"python": "py", "java": "java"}
+    file_extension_mapping: dict[str, str] = {
+        "python": "py",
+        "java": "java",
+        "typescript": "ts",
+    }
 
     def __matches_file_classification(self, full_file_path) -> bool:
         file_name = full_file_path.split("/")[-1]
         expected_file_type_expression_length = (
             len(self.file_extension_mapping[self.file_type.value]) + 1
         )
+        if self.exclude_pattern and fnmatch.fnmatch(file_name, self.exclude_pattern):
+            return False
         return (
             os.path.isfile(full_file_path)
             and file_name[0] != "."
@@ -37,8 +43,14 @@ class DirectoryScanner:
             and not "virtualenv" in dir_name
         )
 
-    def __init__(self, base_path: str, file_type: FileType = FileType.PYTHON):
+    def __init__(
+        self,
+        base_path: str,
+        file_type: FileType = FileType.PYTHON,
+        exclude_pattern: str = None,
+    ):
         self.file_type = file_type
+        self.exclude_pattern = exclude_pattern
         self.scan_path = os.path.abspath(base_path)
         for obj in os.listdir(self.scan_path):
             os.path.join(self.scan_path, obj)
@@ -69,13 +81,29 @@ class DirectoryScanner:
         collect_files=True,
         file_name_containers: bool = False,
         base_path: str | None = None,
+        generator: BaseDiagramGenerator = None,
     ):
-        diagram_generator = DiagramGenerator(self.file_type)
+        if generator is None:
+            from specifipy.parsers.diagram_generator_d2 import DiagramGenerator
+            generator = DiagramGenerator(self.file_type)
+
+        is_mermaid = _is_mermaid_generator(generator)
+
+        if is_mermaid:
+            self._make_diagrams_mermaid(
+                generator, collect_files, file_name_containers, base_path
+            )
+        else:
+            self._make_diagrams_d2(
+                generator, collect_files, file_name_containers, base_path
+            )
+
+    def _make_diagrams_d2(self, generator, collect_files, file_name_containers, base_path):
         diagrams: list[D2Diagram] = []
         for f in self.full_file_paths:
             name = f.split("/")[-1]
             with open(f) as code_file:
-                diagram = diagram_generator.generate_diagram(
+                diagram = generator.generate_diagram(
                     code_file.read(),
                     name,
                     base_path=base_path,
@@ -90,9 +118,42 @@ class DirectoryScanner:
                 D2HashableConnection(x.shape_1, x.shape_2, x.label, x.direction)
                 for x in sum([diagram.connections for diagram in diagrams], [])
             ]
-            diagram_generator.save_diagram_to_file(
+            generator.save_diagram_to_file(
                 base_path if base_path else "./",
                 D2Diagram(classes, list(set(connections))),
+                "code_diagrams",
+            )
+
+    def _make_diagrams_mermaid(self, generator, collect_files, file_name_containers, base_path):
+        collected_lines = ["classDiagram"]
+        seen_lines = set()
+        any_content = False
+
+        for f in self.full_file_paths:
+            name = f.split("/")[-1]
+            with open(f) as code_file:
+                diagram = generator.generate_diagram(
+                    code_file.read(),
+                    name,
+                    base_path=base_path,
+                    save_file=not collect_files,
+                    file_name_container=file_name_containers,
+                )
+                if collect_files and diagram:
+                    # Strip the 'classDiagram' header from each file's output and deduplicate lines
+                    for line in diagram.splitlines():
+                        if line.strip() == "classDiagram":
+                            continue
+                        if line not in seen_lines:
+                            seen_lines.add(line)
+                            collected_lines.append(line)
+                            any_content = True
+
+        if collect_files and any_content:
+            combined = "\n".join(collected_lines) + "\n"
+            generator.save_diagram_to_file(
+                base_path if base_path else "./",
+                combined,
                 "code_diagrams",
             )
 
@@ -115,3 +176,8 @@ class DirectoryScanner:
                         )
             self.full_dir_paths = new_found_directory_paths
             self.do_recursive_directory_scanning()
+
+
+def _is_mermaid_generator(generator: BaseDiagramGenerator) -> bool:
+    from specifipy.parsers.diagram_generator_mermaid import MermaidDiagramGenerator
+    return isinstance(generator, MermaidDiagramGenerator)

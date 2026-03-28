@@ -2,7 +2,10 @@ from py_d2 import D2Connection, D2Diagram, D2Shape, Direction
 from py_d2.shape import Shape
 
 from specifipy.diagram_engines.hashable_connection import D2HashableConnection
+from specifipy.parsers.association_detector import build_association_connections
+from specifipy.parsers.base_diagram_generator import BaseDiagramGenerator
 from specifipy.parsers.generic_parser import FileType, ParserFactory, PythonParser
+from specifipy.parsers.result_filter import FilterOptions, ParsingResultFilter
 from specifipy.parsers.results import ParsingResult
 from specifipy.parsers.structure.code_structure_definitions import (
     ClassStructureDefinition,
@@ -13,9 +16,14 @@ from specifipy.parsers.structure.code_structure_definitions import (
 )
 
 
-class DiagramGenerator:
-    def __init__(self, file_type: FileType = FileType.PYTHON):
+class DiagramGenerator(BaseDiagramGenerator):
+    def __init__(
+        self,
+        file_type: FileType = FileType.PYTHON,
+        filter_options: FilterOptions = None,
+    ):
         self.parser = ParserFactory.get_parser(file_type)
+        self.filter_options = filter_options
 
     def __generate_class_definition_d2(
         self,
@@ -72,6 +80,10 @@ class DiagramGenerator:
         parsing_result: ParsingResult = self.parser.parse(source_file_content)
         if not (parsing_result.class_fields or parsing_result.classes or parsing_result.functions or parsing_result.docstrings):
             print(f"File {source_file_name} returned empty result as it probably contains syntax errors")
+
+        if self.filter_options:
+            parsing_result = ParsingResultFilter(self.filter_options).apply(parsing_result)
+
         elements_to_generate: list[D2Shape] = []
         link_to_generate: list[D2Connection] = []
 
@@ -114,6 +126,14 @@ class DiagramGenerator:
                             "{ style: { stroke-dash: 3 } } ",
                         )
                     )
+
+        # Add association arrows for typed fields that reference known classes
+        known_class_names = {c.name for c in parsing_result.classes}
+        for src, tgt in build_association_connections(parsing_result, known_class_names):
+            link_to_generate.append(
+                D2HashableConnection(src, tgt, "{ style: { stroke-dash: 1 } }")
+            )
+
         self.add_missing_elements_from_links_as_classes(
             elements_to_generate, link_to_generate
         )
