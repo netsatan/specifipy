@@ -78,8 +78,6 @@ class DiagramGenerator(BaseDiagramGenerator):
         file_name_container=False,
     ) -> D2Diagram | None:
         parsing_result: ParsingResult = self.parser.parse(source_file_content)
-        if not (parsing_result.class_fields or parsing_result.classes or parsing_result.functions or parsing_result.docstrings):
-            print(f"File {source_file_name} returned empty result as it probably contains syntax errors")
 
         if self.filter_options:
             parsing_result = ParsingResultFilter(self.filter_options).apply(parsing_result)

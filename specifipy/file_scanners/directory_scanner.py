@@ -126,7 +126,7 @@ class DirectoryScanner:
 
     def _make_diagrams_mermaid(self, generator, collect_files, file_name_containers, base_path):
         collected_lines = ["classDiagram"]
-        seen_lines = set()
+        seen_relationships = set()
         any_content = False
 
         for f in self.full_file_paths:
@@ -140,14 +140,19 @@ class DirectoryScanner:
                     file_name_container=file_name_containers,
                 )
                 if collect_files and diagram:
-                    # Strip the 'classDiagram' header from each file's output and deduplicate lines
                     for line in diagram.splitlines():
                         if line.strip() == "classDiagram":
                             continue
-                        if line not in seen_lines:
-                            seen_lines.add(line)
-                            collected_lines.append(line)
-                            any_content = True
+                        # Deduplicate only relationship arrows, never structural lines
+                        is_relationship = any(
+                            token in line for token in ("--|>", "..|>", "-->")
+                        )
+                        if is_relationship:
+                            if line in seen_relationships:
+                                continue
+                            seen_relationships.add(line)
+                        collected_lines.append(line)
+                        any_content = True
 
         if collect_files and any_content:
             combined = "\n".join(collected_lines) + "\n"
