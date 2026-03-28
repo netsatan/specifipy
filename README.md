@@ -46,8 +46,84 @@ diagram_generator.generate_diagram(
 
 Of course, you can provide as `file_contents_str` any valid code however you'd like, not only from a file.
 
+### Using TypeScript?
+Pass `FileType.TYPESCRIPT` — specifipy uses tree-sitter under the hood so no extra compiler is needed:
+```python
+from specifipy.file_scanners.directory_scanner import DirectoryScanner
+from specifipy.parsers.generic_parser import FileType
+d = DirectoryScanner("/path/to/your/src/directory", FileType.TYPESCRIPT)
+d.make_diagrams()
+```
+
+TypeScript support requires the optional dependencies `tree-sitter` and `tree-sitter-typescript`:
+```
+pip install tree-sitter tree-sitter-typescript
+```
+
+### Generating Mermaid diagrams
+By default specifipy produces D2 (`.d2`) files. To get Mermaid (`.mmd`) instead — which renders
+natively on GitHub, GitLab, Obsidian and many other platforms — use the `DiagramGeneratorFactory`:
+```python
+from specifipy.file_scanners.directory_scanner import DirectoryScanner
+from specifipy.parsers.diagram_generator_factory import DiagramFormat, DiagramGeneratorFactory
+from specifipy.parsers.generic_parser import FileType
+
+generator = DiagramGeneratorFactory.get_generator(
+    diagram_format=DiagramFormat.MERMAID,
+    file_type=FileType.PYTHON,
+)
+scanner = DirectoryScanner("/path/to/src")
+scanner.make_diagrams(generator=generator, base_path="./docs/")
+```
+
+The output follows the standard Mermaid `classDiagram` syntax:
+```
+classDiagram
+    class Addition {
+        +int type_annotated_field_in_class
+        +__init__(self, numbers) list[int]
+        +sum_numbers(self) int
+    }
+    Addition --|> MathOperation
+```
+
+### Association relationships
+In addition to inheritance and interface-implementation arrows, specifipy now detects
+**associations** — when a class holds a typed field whose type is another known class in the same
+codebase. These are drawn as dashed arrows in D2 and `-->` arrows in Mermaid:
+
+```python
+class Engine:
+    horsepower: int
+
+class Car:
+    engine: Engine   # <-- association detected, Car --> Engine arrow is emitted
+```
+
+Generic container wrappers are unwrapped automatically, so `orders: list[Order]` still produces a
+`Customer --> Order` relationship.
+
+### Filtering output
+Pass a `FilterOptions` object to any generator to control what appears in the diagram:
+
+```python
+from specifipy.parsers.diagram_generator_factory import DiagramFormat, DiagramGeneratorFactory
+from specifipy.parsers.result_filter import FilterOptions
+
+generator = DiagramGeneratorFactory.get_generator(
+    diagram_format=DiagramFormat.D2,
+    filter_options=FilterOptions(
+        public_only=True,               # hide private/dunder methods and fields
+        include_classes=["Order", "Customer"],  # only diagram these classes
+    ),
+)
+```
+
+`public_only=True` strips Python `_private` / `__dunder__` members and Java `private` members
+(the `-` prefix convention).
+
 ### Available parsers
-Currently, there are two parsers available - one for Java and one for Python:
+Currently, there are three parsers available — Python, Java, and TypeScript:
 ![](./docs/parsers.svg)
 
 ### Diagram example
@@ -153,6 +229,36 @@ ComplexNumber -> SomeTest
 If you're generating Java code, the dotted line is used to indicate implemented interface instead of class inheritance,
 and private fields and methods are marked accordingly.
 
+### Using the CLI
+After installation, a `specifipy` command is available:
+
+```
+specifipy <path> [options]
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `--format d2\|mermaid` | `d2` | Output diagram format |
+| `--file-type python\|java\|typescript` | `python` | Source language |
+| `--output <dir>` | current dir | Where to write diagram files |
+| `--public-only` | off | Hide private/dunder members |
+| `--exclude-pattern <glob>` | — | Skip files matching this pattern (e.g. `test_*.py`) |
+| `--include-classes A B …` | all | Only diagram these class names |
+| `--no-collect` | off | Write one file per source file instead of a combined diagram |
+
+Examples:
+
+```bash
+# Generate a single Mermaid diagram for a Python project, skipping test files
+specifipy ./src --format mermaid --output ./docs --exclude-pattern "test_*.py"
+
+# Generate D2 diagrams for a Java project, public API only
+specifipy ./src --file-type java --public-only --output ./diagrams
+
+# Only diagram two specific classes from a TypeScript project
+specifipy ./src --file-type typescript --include-classes UserService AuthService
+```
+
 ---
-If you like this project, and it helped you in any way, I'll be thrilled to know that! I like to write software that's 
+If you like this project, and it helped you in any way, I'll be thrilled to know that! I like to write software that's
 actually useful.
